@@ -4,6 +4,7 @@ public class Jump
 {
     // 「まだ一度も起きていない」を表す。経過時間が無限大になり、猶予時間内と判定されない
     const float NoTime = float.NegativeInfinity;
+    const float RisingSpeedThreshold = 1f; // 上昇とみなす上向き速度の下限（ユニット/秒）
 
     readonly Rigidbody2D body;
     readonly JumpSettings settings;
@@ -11,6 +12,7 @@ public class Jump
     readonly float baseGravityScale; // 上昇中の重力スケール。落下時はこれに倍率を掛ける
     float lastJumpPressedTime = NoTime; // 最後にジャンプボタンを押した時刻（先行入力用）
     float lastGroundedTime = NoTime; // 最後に接地していた時刻（コヨーテタイム用）
+    bool isAscendingFromJump; // ジャンプで上昇を始めてから、接地するまで true
 
     // 「高さ」と「頂点までの時間」から、必要な重力と初速を逆算する。
     // 公式: height = 1/2 * g * t^2, initialVelocity = g * t
@@ -31,7 +33,20 @@ public class Jump
     // 接地判定と合わせて決める（先行入力のため）
     public void RequestJump() => lastJumpPressedTime = Time.time;
 
-    public void NotifyGrounded() => lastGroundedTime = Time.time;
+    public void NotifyGrounded()
+    {
+        isAscendingFromJump = false;
+        lastGroundedTime = Time.time;
+    }
+
+    // ジャンプで上昇中か。坂で上向きの速度が出ているだけの場合は含めない
+    public bool IsRisingFromJump => isAscendingFromJump && body.linearVelocity.y > RisingSpeedThreshold;
+
+    // 頂点を過ぎたら上昇を終える。着地後の坂の接線速度で上昇扱いが残らないようにする
+    public void UpdateAscentState()
+    {
+        if (body.linearVelocity.y <= RisingSpeedThreshold) isAscendingFromJump = false;
+    }
 
     // 先行入力（着地前の押下）とコヨーテタイム（離地後の猶予）の両方を満たすときだけジャンプする。
     // ジャンプしたかを返す
@@ -42,6 +57,7 @@ public class Jump
         if (!jumpWasPressedRecently || !canStillJump) return false;
 
         body.linearVelocity = new Vector2(body.linearVelocity.x, jumpInitialVelocity);
+        isAscendingFromJump = true;
 
         // 同じ入力・同じ接地で2回ジャンプしないよう消費する
         lastJumpPressedTime = NoTime;

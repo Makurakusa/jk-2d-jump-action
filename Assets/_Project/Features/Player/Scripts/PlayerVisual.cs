@@ -6,7 +6,8 @@ public class PlayerVisual : MonoBehaviour
 {
     [SerializeField] Sprite idleSprite; // 地上で走っていないとき（停止・歩き）
     [SerializeField] Sprite runningSprite; // 歩行の最高速を超えているとき
-    [SerializeField] Sprite jumpingSprite; // 空中（上昇・落下・急降下）で共用する
+    [SerializeField] Sprite jumpingSprite; // 空中（上昇・落下・急降下・ボディアタック）で共用する
+    [SerializeField] Sprite crouchingSprite; // しゃがみ・しゃがみ歩き・しゃがみ滑り・移行中・解除中で共用する
 
     PlayerMover mover;
     SpriteRenderer spriteRenderer;
@@ -26,9 +27,12 @@ public class PlayerVisual : MonoBehaviour
         spriteRenderer.flipX = mover.FacingDirection < 0f;
     }
 
+    // しゃがみ → 空中 → 走り → 待機・歩き の順に調べる。しゃがみは接地中にしか起きないので、先に調べてよい
     Sprite ChooseSprite()
     {
+        if (mover.IsCrouched) return crouchingSprite;
         if (!mover.IsGrounded) return jumpingSprite;
+
         return mover.IsRunning ? runningSprite : idleSprite;
     }
 }

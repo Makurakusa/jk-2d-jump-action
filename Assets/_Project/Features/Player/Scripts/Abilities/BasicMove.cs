@@ -15,8 +15,9 @@ public class BasicMove
     public bool IsStandingStill(bool isGrounded, float horizontalInput) =>
         isGrounded && horizontalInput == 0f;
 
-    // 力を加えず速度を直接書き換えるので、摩擦や壁との接触の影響を受けにくい
-    public void UpdateVelocity(MoveInput input, bool isGrounded)
+    // 力を加えず速度を直接書き換えるので、摩擦や壁との接触の影響を受けにくい。
+    // maxSpeedMultiplier は歩きの最高速に掛ける倍率（しゃがみ歩きは小さくする。通常は 1）
+    public void UpdateVelocity(MoveInput input, bool isGrounded, float maxSpeedMultiplier)
     {
         // 端での押し出しによる滑りを止める
         if (IsStandingStill(isGrounded, input.Horizontal))
@@ -36,6 +37,7 @@ public class BasicMove
             && input.Horizontal * body.linearVelocity.x < 0f;
         if (isReversing) acceleration *= settings.ReverseAccelerationMultiplier;
 
-        body.MoveVelocityXTowards(input.Horizontal * settings.MoveSpeed, acceleration);
+        float targetSpeed = input.Horizontal * settings.MoveSpeed * maxSpeedMultiplier;
+        body.MoveVelocityXTowards(targetSpeed, acceleration);
     }
 }

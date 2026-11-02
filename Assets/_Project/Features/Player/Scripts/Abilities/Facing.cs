@@ -11,14 +11,18 @@ public class Facing
         this.settings = settings;
     }
 
-    // 左右を倒している間だけ向きを更新する。ブレーキ中は逆入力でも、滑り終わるまで元の向きを保つ
-    public void Step(float horizontalInput, bool isBraking)
+    // 左右を倒している間だけ向きを更新する。
+    // isLocked が true の間（ブレーキ・しゃがみ滑り・ボディアタック）は、逆入力でも元の向きを保つ
+    public void Step(float horizontalInput, bool isLocked)
     {
-        if (isBraking) return;
+        if (isLocked) return;
         if (Mathf.Abs(horizontalInput) < settings.HoldThreshold) return;
 
         Direction = Mathf.Sign(horizontalInput);
     }
+
+    // 入力とは関係なく、向きを決める（ボディアタックの発動時に使う）
+    public void Set(float direction) => Direction = direction;
 
     public void Reset() => Direction = 1f;
 }
