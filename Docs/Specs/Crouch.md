@@ -44,70 +44,23 @@
 ### 1.5. スプライト
 - しゃがみ・しゃがみ歩き・しゃがみ滑りは、すべて `PlayerCrouching` を使う。
 
-## 2. 決まっていない仕様
-いまのところない。実装中に出てきたら追加する。
+## 2. 実装で決めた細部
+仕様書にない細部。実装の判断をここに残す。
 
-## 3. 実装方針
-[Responsibilities.md](../Notes/Responsibilities.md) の形に合わせて、設定は `ScriptableObject`、処理は普通のクラスにする。
-
-### 3.1. パラメータ（案）
-`CrouchSettings`（`ScriptableObject`）に置く。
-
-| 名前 | 既定値 | 内容 |
-|---|---|---|
-| `StickThreshold` | 0.6 | しゃがむとみなすスティックの倒し量（0〜1）。急降下の閾値（`DiveSettings.StickThreshold`）とは別に持つ |
-| `WalkSpeedMultiplier` | 0.4 | しゃがみ歩きの最高速の倍率（`BasicMoveSettings.MoveSpeed` に掛ける） |
-| `SlideDeceleration` | 35 | しゃがみ滑りで速度を0へ近づける強さ（ユニット/秒²）。滑る時間はこれで決まる。最高速 28 から約0.8秒で止まる |
-| `DashEntrySpeed` | 28 | 滑りを解除してダッシュに移るときの、ダッシュの基準速度。減速した現在の速度ではなくこの値から入る |
-| `TransitionSeconds` | 0.08 | しゃがむ移行と立ち上がる解除にかける時間（秒） |
-| `CrouchColliderHeightMultiplier` | 0.5 | しゃがんだときのコライダーの高さ（y）に掛ける倍率。x は変えない。足元をそろえるため、`offset` の y もずらす。移行が終わった後に変える |
-
-### 3.2. クラスと状態（案）
-`Crouch`（普通のクラス）が、状態の遷移とコライダーの変更を担当する。`Dash` は知らず、必要な値は `PlayerMover` が引数で渡す。
-
-| 状態（`CrouchState`） | 内容 |
+| 項目 | 決めたこと |
 |---|---|
-| `Standing` | 立っている |
-| `Entering` | しゃがむ移行中（`TransitionSeconds` の間）。移動できない。コライダーはまだ立ちのまま |
-| `Crouching` | しゃがんでいる（歩き含む）。コライダーを小さくしている |
-| `Exiting` | 立ち上がる解除中（`TransitionSeconds` の間）。移動できない。コライダーは解除が終わるまで小さいまま |
-| `Sliding` | しゃがみ滑り中。入ってから `TransitionSeconds` 経過後にコライダーを小さくする |
+| しゃがむ移行中・解除中の速度 | 水平・垂直ともに0（接地中のみ起きる） |
+| 滑りの移行時間 | 滑り自体は入った時点から始まり、コライダーだけを `TransitionSeconds` 後に縮める。移行中に止めると勢いが消えるため |
+| ブレーキ中にしゃがんだときの境目 | 水平速度が歩きの最高速（`MoveSpeed`）以下なら通常のしゃがみ |
+| 滑りを解除して天井があるとき | 解除に入らず、滑り（止まったらしゃがみ）を続ける |
+| 空中に出たとき | すぐ立ちに戻し、コライダーも戻す（天井は見ない）。滑りの途中だった場合は、ダッシュボタンを押していれば空中でダッシュを再開する |
+| 天井判定 | 床と同じレイヤー（`groundLayerMask`）に対する `OverlapBox`。立ち上がる解除の開始時にだけ見る |
+| 設定の割り当て | `CrouchSettings` は必須（`null` を許さない） |
 
-| メソッド | 役割 |
-|---|---|
-| `UpdateState(input, isGrounded, isDashActive, dashSpeed, hasCeiling)` | 状態遷移を行う唯一の場所（下記）。`hasCeiling` は `CeilingCheck` を、解除の開始時にだけ見る |
-| `UpdateVelocity()` | `Sliding` 中の水平速度を `SlideDeceleration` で0へ近づける |
-| `Reset()` | `Standing` に戻し、コライダーを元に戻す |
-
-`PlayerMover` では次の順にする。
-1. ダッシュの状態遷移の前に `Crouch.UpdateState` を呼ぶ
-2. `Sliding` に入ったフレームに `Dash.Reset()` を呼ぶ。解除したフレームでダッシュの開始条件を満たすときは、`Dash` に基準速度（`DashEntrySpeed`）を指定して開始させる
-3. 水平速度は、`Sliding` なら `Crouch`、`Entering` / `Exiting` なら移動しない（速度0）、ダッシュ有効なら `Dash`、それ以外は `BasicMove`（`Crouching` の間は最高速に倍率を掛ける）が決める
-4. しゃがんでいる間（`Entering` / `Crouching` / `Exiting` / `Sliding`）は、`Dash` の開始条件を満たさない。`IsStandingStill` は `Sliding` を除く
-5. 向き（`Facing.Step`）は、ブレーキ中に加えて `Sliding` 中も更新しない
-
-#### 状態遷移（`UpdateState()`）
-- `Standing` → `Entering`: 接地中、スティックを `StickThreshold` 以上下に倒している
-- `Entering` → `Crouching`: `TransitionSeconds` が経過した（このときコライダーを小さくする）。途中でスティックを戻したら `Standing` に戻る
-- `Standing` → `Sliding`: 上記の入力に加えて、ダッシュが有効。ブレーキ状態のときは、現在の速度が歩行の最高速を超えているときだけ `Sliding`、超えていなければ `Entering`
-- `Crouching` → `Exiting`: スティックを倒すのをやめた、かつ頭上に天井がない（天井の判定はこの移行の開始時に行う）
-- `Exiting` → `Standing`: `TransitionSeconds` が経過した（このときコライダーを元に戻す）
-- `Sliding` → `Exiting`: スティックを倒すのをやめた、かつ頭上に天井がない（このときダッシュの開始条件を満たすならダッシュへ移る）
-- `Sliding` → `Crouching`: 速度が0になった（スティックを倒している間）
-- `Sliding` → 空中: ジャンプした（速度は維持）。接地でなくなったら `Standing` に戻し、コライダーを元に戻す。ダッシュボタンを押していれば、`Dash` を現在の速度のまま空中で再開する
-
-### 3.3. 変更するファイル
-| ファイル | 内容 |
-|---|---|
-| `Scripts/Settings/CrouchSettings.cs`（新規） | 3.1 のパラメータ |
-| `Scripts/Abilities/Crouch.cs`（新規） | 3.2 のクラスと `CrouchState` |
-| `Scripts/Abilities/CeilingCheck.cs`（新規） | 頭上の天井の判定。`GroundCheck` と同じ形で、位置・箱の大きさ・距離・レイヤーを `PlayerMover` から渡す |
-| `Scripts/Abilities/BasicMove.cs` | 最高速の倍率を引数で受け取れるようにする |
-| `Scripts/Abilities/Dash.cs` | 開始時の速度を指定してダッシュを始められるようにする。空中で現在の速度のまま再開できるようにもする |
-| `Scripts/PlayerMover.cs` | `Crouch` と `CeilingCheck` を作って呼ぶ。天井判定用の位置・大きさ・レイヤーを Inspector で設定できるようにする。上記の順序にする |
-| `Scripts/PlayerVisual.cs` | しゃがみ系のスプライトを追加する |
-| `Data/CrouchSettings.asset`（新規、Unity で作成） | `CrouchSettings` の実体 |
-
-## 4. 今後のタスク
-- 実装（3.3 のファイル）
-- Unity で、天井判定用の位置を追加する（頭の上にある子オブジェクト）
+## 3. 実装
+- 設定: `Scripts/Settings/CrouchSettings.cs`（アセット: `Data/CrouchSettings.asset`）
+  - 既定値: `StickThreshold` 0.6、`WalkSpeedMultiplier` 0.4、`SlideDeceleration` 35、`DashEntrySpeed` 28、`TransitionSeconds` 0.08、`CrouchColliderHeightMultiplier` 0.5
+- 状態と遷移: `Scripts/Abilities/Crouch.cs`（`CrouchState`、`CrouchTransition`）
+- 天井判定: `Scripts/Abilities/CeilingCheck.cs`
+- コライダーの縮小・復元: `Scripts/Abilities/ShrinkableCollider.cs`（ボディアタックと共有）
+- 処理の順序と水平速度の優先順位: `PlayerMover.cs` の `FixedUpdate`（[MotionState.md](MotionState.md) 1.4）

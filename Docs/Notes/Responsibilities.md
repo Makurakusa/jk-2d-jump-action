@@ -55,7 +55,7 @@
 |---|---|
 | `PlayerMover`（`MonoBehaviour`） | 機能のクラスを作って、`FixedUpdate` の中で決まった順に呼ぶ。`InputActionReference` を読んで `MoveInput` として渡す。機能どうしの値の受け渡しを行う。`Respawn` などの外部 API を持つ |
 | `PlayerVisual`（`MonoBehaviour`） | 状態から選んだスプライトの表示と左右反転。`PlayerMover` を読むだけ |
-| ボディアタック、しゃがみ | 固有の機能。機能のクラスと同じ形で追加する（今回の対象外） |
+| ボディアタック、しゃがみ | 固有の機能。`Crouch.cs`、`BodyAttack.cs` として実装済み（[Crouch.md](../Specs/Crouch.md)、[BodyAttack.md](../Specs/BodyAttack.md)） |
 
 ### 5. 必要なファイル
 置き場所は、特に書かない限り `Assets/_Project/Features/Player/` 配下。`.meta` は Unity が生成する。
@@ -95,6 +95,13 @@ Assets/_Project/
 | `Abilities/Dash.cs` | 普通のクラス | ダッシュとブレーキ。状態の `enum`（`DashState`: 非有効 / ダッシュ / ブレーキ）もここに置く | 2 |
 | `Abilities/Facing.cs` | 普通のクラス | 向きの更新 | 2 |
 | `Abilities/Rigidbody2DExtensions.cs` | `static` クラス | `BasicMove` と `Dash` が共有する、水平速度を目標へ近づける拡張メソッド | 2 |
+| `Settings/CrouchSettings.cs` | `ScriptableObject` | しゃがみ・しゃがみ滑りの設定 | 実装済 |
+| `Settings/BodyAttackSettings.cs` | `ScriptableObject` | ボディアタックの設定 | 実装済 |
+| `Abilities/ShrinkableCollider.cs` | 普通のクラス | 当たり判定の縮小・復元（しゃがみとボディアタックで共有） | 実装済 |
+| `Abilities/CeilingCheck.cs` | 普通のクラス | 頭上の天井判定 | 実装済 |
+| `Abilities/WallCheck.cs` | 普通のクラス | 進む向きの壁判定（ボディアタックで使う） | 実装済 |
+| `Abilities/Crouch.cs` | 普通のクラス | しゃがみ・しゃがみ滑りの状態遷移 | 実装済 |
+| `Abilities/BodyAttack.cs` | 普通のクラス | ボディアタックの発動・移動・終了 | 実装済 |
 | `PlayerVisual.cs` | `MonoBehaviour` | スプライトの表示と反転 | 3 |
 
 #### 5.2. 更新するファイル

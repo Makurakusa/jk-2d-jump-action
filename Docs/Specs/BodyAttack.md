@@ -35,65 +35,32 @@
 - ダッシュ: 発動時にダッシュ状態を解除する（速度は 1.3 のとおり引き継ぐ）。
 - しゃがみ: 空中だけの動きなので、しゃがみ状態とは重ならない。コライダーだけを共有する。
 
-## 2. 決まっていない仕様
-- 初速の上向きの大きさ（案: 15。頂点まで約1ユニット、滞空約0.27秒）
-- 発動中の重力（案: 通常の重力。落下の倍率は掛けない）
-- ダッシュボタンを押したまま終了したとき、地上のモーションに移った後の速度（案: 通常の地上の歩きの規則に従う）
-- 攻撃判定の円の大きさ・位置・ダメージ（攻撃の概念ができてから）
-- スプライト（専用の絵がないので、案: `PlayerJumping` か `PlayerCrouching` を共用する）
+## 2. 実装で決めた細部
+仕様書にない細部。実装の判断をここに残す。
 
-## 3. 実装方針
-[Responsibilities.md](../Notes/Responsibilities.md) の形に合わせて、設定は `ScriptableObject`、処理は普通のクラスにする。
-
-### 3.1. パラメータ（案）
-`BodyAttackSettings`（`ScriptableObject`）に置く。
-
-| 名前 | 既定値 | 内容 |
-|---|---|---|
-| `Speed` | 22 | 水平速度の基準値（ユニット/秒）。基本速度（`BasicMoveSettings.MoveSpeed` 12）からダッシュ最高速（`DashSettings.MaxDashSpeed` 28）の間にする |
-| `UpwardSpeed` | 15 | 発動時に与える上向き速度（ユニット/秒） |
-| `TransitionSeconds` | 0.08 | コライダーを切り替える移行時間（秒）。しゃがみの `TransitionSeconds` と同じ数値だが、設定は別に持つ |
-| `BufferSeconds` | 0.08 | 着地の直前に押した発動を受け付ける時間（秒）。ジャンプの `JumpBufferSeconds` と同じ数値だが、設定は別に持つ |
-
-入力は `BodyAttack` アクション（`buttonEast`）を `PlayerMover` の Inspector に割り当てる。
-
-### 3.2. クラスと状態（案）
-`BodyAttack`（普通のクラス）が、発動・移動・終了を担当する。
-
-| メンバー | 役割 |
+| 項目 | 決めたこと |
 |---|---|
-| `IsActive` | 発動中か |
-| `RequestAttack()` | 押された時刻を記録する（ボタンのイベントから呼ぶ。`BufferSeconds` の間は有効） |
-| `TryStart(input, facingDirection, isGrounded, currentVelocityX, maxDashSpeed)` | 発動できるときに発動して、向きを返す。空中1回の制限もここで管理する |
-| `UpdateVelocity()` | 発動中の水平速度を保つ |
-| `Step(isGrounded, isTouchingWall)` | 着地・壁で終了させる。着地で空中1回の制限を回復する。`isTouchingWall` は `Rigidbody2D` の接触（法線がほぼ水平な面）から、`PlayerMover` が求めて渡す |
-| `Reset()` | 非発動に戻す（リスポーン用） |
+| 初速（上向き） | `UpwardSpeed` の 15 |
+| 発動中の重力 | 通常の重力。落下中は `FallGravityMultiplier` も通常どおり掛かる（`Jump` は発動中かを区別しない） |
+| 発動中の水平速度 | 基準値 `Speed`（22）と、発動時の同じ向きの速度のうち大きいほう。ダッシュ最高速（28）は超えない |
+| ダッシュがないゲーム | 引き継ぎ速度の上限は `Speed` |
+| 向き | 発動時に、左右を倒していればその方向、倒していなければ向きへ飛ぶ。発動時にキャラの向きも更新する |
+| 先行入力 | 押してから `BufferSeconds` の間は有効。空中で発動できる最初のフレームに発動する |
+| 壁判定 | 進む向きの先にある、法線がほぼ水平な面（`x` の絶対値 0.9 以上）への接触。逆向きの壁には反応しない |
+| 壁で終わったとき | 水平速度を0にし、コライダーを即座に戻す |
+| 着地で終わったとき | コライダーを即座に戻す。頭上に天井があれば、縮めたままにしてしゃがみにする |
+| コライダー | 発動から `TransitionSeconds` 後に縮める。終了時は即座に戻す（天井の下の着地を除く） |
+| 1回の制限 | 滞空中に1回。着地で回復する |
+| しゃがみとの関係 | しゃがんでいる間（空中でしゃがんだままのジャンプを含む）は発動しない。発動中はしゃがみを入れない |
+| 設定の割り当て | `BodyAttackSettings` は必須（`null` を許さない） |
 
-`PlayerMover` では次の順にする。
-1. 接地判定
-2. ジャンプ
-3. ボディアタックの開始（`TryStart`）。開始したフレームに `Dive.Cancel()`・`Dash.Reset()` を呼び、`Facing` に向きを設定する
-4. 急降下、ダッシュの状態遷移（ボディアタック中は呼ばない）
-5. 向き（ボディアタック中は更新しない）
-6. 重力スケール
-7. 水平移動（ボディアタック中は `BodyAttack.UpdateVelocity`）
-8. ボディアタックの終了判定（`Step`）
-9. 落下速度の制限
-
-### 3.3. 変更するファイル
-| ファイル | 内容 |
-|---|---|
-| `Scripts/Settings/BodyAttackSettings.cs`（新規） | 3.1 のパラメータ |
-| `Scripts/Abilities/BodyAttack.cs`（新規） | 3.2 のクラス |
-| `Scripts/Abilities/Facing.cs` | 向きを外から設定する入口を追加する |
-| `Scripts/Abilities/Crouch.cs` | コライダーの切り替えを、ボディアタックからも使えるようにする |
-| `Scripts/PlayerMover.cs` | `BodyAttack` を作って呼ぶ。入力のイベントを購読する |
-| `Scripts/PlayerVisual.cs` | ボディアタック中のスプライトを追加する |
-| `Data/BodyAttackSettings.asset`（新規、Unity で作成） | `BodyAttackSettings` の実体 |
-| Input Action（`InputSystem_Actions`） | `BodyAttack` アクションを新設して `buttonEast` に割り当てる（Unity で作業） |
-
-ボディアタックの実装は、しゃがみのコライダー切り替え（[Crouch.md](Crouch.md)）ができてからにする。
+## 3. 実装
+- 設定: `Scripts/Settings/BodyAttackSettings.cs`（アセット: `Data/BodyAttackSettings.asset`）
+  - 既定値: `Speed` 22、`UpwardSpeed` 15、`TransitionSeconds` 0.08、`BufferSeconds` 0.08
+- 発動・移動・終了: `Scripts/Abilities/BodyAttack.cs`（`BodyAttackEnd`）
+- 入力: `PlayerMover` の `bodyAttackAction`（`BodyAttack` アクション、`<Gamepad>/buttonEast`）
+- 処理の順序: `PlayerMover.cs` の `FixedUpdate`（[MotionState.md](MotionState.md) 1.4）
 
 ## 4. 今後のタスク
-- 2 の決まっていない仕様を決める
-- 攻撃の概念ができたら、前方の攻撃判定を作る
+- 攻撃の概念ができたら、前方の攻撃判定を作る（1.5）
+- 発動中のスプライトを決める（専用の絵がないため）
